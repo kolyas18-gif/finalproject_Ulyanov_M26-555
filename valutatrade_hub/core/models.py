@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import math
 from datetime import datetime
 
 
@@ -67,3 +68,57 @@ class User:
             self._hashed_password,
             self._hash_password(password),
         )
+
+
+class Wallet:
+    def __init__(self, currency_code: str, balance: float = 0.0):
+        if not isinstance(currency_code, str) or not currency_code.strip():
+            raise ValueError("Код валюты не может быть пустым.")
+
+        self.currency_code = currency_code.strip().upper()
+        self.balance = balance
+
+    @staticmethod
+    def _validate_number(value: float) -> float:
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise TypeError("Значение должно быть числом.")
+
+        value = float(value)
+        if not math.isfinite(value):
+            raise ValueError("Значение должно быть конечным числом.")
+
+        return value
+
+    @property
+    def balance(self) -> float:
+        return self._balance
+
+    @balance.setter
+    def balance(self, value: float) -> None:
+        value = self._validate_number(value)
+        if value < 0:
+            raise ValueError("Баланс не может быть отрицательным.")
+
+        self._balance = value
+
+    def deposit(self, amount: float) -> None:
+        amount = self._validate_number(amount)
+        if amount <= 0:
+            raise ValueError("Сумма пополнения должна быть положительной.")
+
+        self.balance = self.balance + amount
+
+    def withdraw(self, amount: float) -> None:
+        amount = self._validate_number(amount)
+        if amount <= 0:
+            raise ValueError("Сумма снятия должна быть положительной.")
+        if amount > self.balance:
+            raise ValueError("Недостаточно средств.")
+
+        self.balance = self.balance - amount
+
+    def get_balance_info(self) -> dict:
+        return {
+            "currency_code": self.currency_code,
+            "balance": self.balance,
+        }
