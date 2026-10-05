@@ -123,7 +123,7 @@ class Wallet:
             "balance": self.balance,
         }
 
-    
+
 class Portfolio:
     """Хранит кошельки пользователя и рассчитывает их общую стоимость."""
 
