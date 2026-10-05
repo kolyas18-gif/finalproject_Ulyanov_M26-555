@@ -122,3 +122,90 @@ class Wallet:
             "currency_code": self.currency_code,
             "balance": self.balance,
         }
+
+    
+class Portfolio:
+    """Хранит кошельки пользователя и рассчитывает их общую стоимость."""
+
+    def __init__(
+        self,
+        user_id: int,
+        user: User,
+        wallets: dict[str, Wallet] | None = None,
+    ):
+        if user_id != user.user_id:
+            raise ValueError("Идентификатор не совпадает с пользователем.")
+
+        self._user_id = user_id
+        self._user = user
+        self._wallets: dict[str, Wallet] = {}
+
+        if wallets is not None:
+            for code, wallet in wallets.items():
+                if not isinstance(wallet, Wallet):
+                    raise TypeError("Значение должно быть объектом Wallet.")
+                if code != wallet.currency_code:
+                    raise ValueError("Ключ не совпадает с кодом кошелька.")
+                self._wallets[code] = wallet
+
+    @property
+    def user_id(self) -> int:
+        return self._user_id
+
+    @property
+    def user(self) -> User:
+        return self._user
+
+    @property
+    def wallets(self) -> dict[str, Wallet]:
+        """Возвращает копию словаря с теми же объектами кошельков."""
+        return self._wallets.copy()
+
+    @staticmethod
+    def _normalize_currency(currency_code: str) -> str:
+        if not isinstance(currency_code, str) or not currency_code.strip():
+            raise ValueError("Код валюты не может быть пустым.")
+        return currency_code.strip().upper()
+
+    def add_currency(self, currency_code: str) -> None:
+        """Создаёт пустой кошелёк, запрещая повторное добавление валюты."""
+        code = self._normalize_currency(currency_code)
+        if code in self._wallets:
+            raise ValueError(f"Кошелёк {code} уже существует.")
+
+        self._wallets[code] = Wallet(code)
+
+    def get_wallet(self, currency_code: str) -> Wallet:
+        code = self._normalize_currency(currency_code)
+        if code not in self._wallets:
+            raise ValueError(f"Кошелёк {code} не найден.")
+
+        return self._wallets[code]
+
+    def get_total_value(self, base_currency: str = "USD") -> float:
+        """Пересчитывает балансы в базовую валюту по учебным курсам."""
+        exchange_rates = {
+            "USD": 1.0,
+            "EUR": 1.1,
+            "RUB": 0.01,
+            "BTC": 60000.0,
+            "ETH": 3000.0,
+        }
+
+        base = self._normalize_currency(base_currency)
+        if base not in exchange_rates:
+            raise ValueError(f"Неизвестен курс базовой валюты {base}.")
+
+        total = 0.0
+        for code, wallet in self._wallets.items():
+            if code == base:
+                total += wallet.balance
+                continue
+
+            if code not in exchange_rates:
+                raise ValueError(f"Неизвестен курс валюты {code}.")
+
+            rate = exchange_rates[code] / exchange_rates[base]
+            total += wallet.balance * rate
+
+        return total
