@@ -2,6 +2,7 @@ import math
 from datetime import UTC, datetime
 from secrets import token_hex
 
+from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.exceptions import InsufficientFundsError
 from valutatrade_hub.core.models import Portfolio, User, Wallet
 from valutatrade_hub.core.rates import get_rate, normalize_currency
@@ -202,7 +203,7 @@ class TradingService:
     def buy(self, currency_code: str, amount: float) -> dict:
         """Покупает валюту за USD и сохраняет оба баланса."""
         portfolio = self.get_portfolio()
-        code = normalize_currency(currency_code)
+        code = get_currency(normalize_currency(currency_code)).code
         amount = self._validate_amount(amount)
 
         if code == "USD":
@@ -254,14 +255,18 @@ class TradingService:
     def sell(self, currency_code: str, amount: float) -> dict:
         """Продаёт валюту и зачисляет выручку на USD-кошелёк."""
         portfolio = self.get_portfolio()
-        code = normalize_currency(currency_code)
+        code = get_currency(normalize_currency(currency_code)).code
         amount = self._validate_amount(amount)
 
         if code == "USD":
             raise ValueError("Нельзя продавать USD за USD.")
 
         if code not in portfolio.wallets:
-            raise ValueError(f"У вас нет кошелька {code}.")
+            raise InsufficientFundsError(
+                available=0.0,
+                required=amount,
+                code=code,
+            )
 
         wallet = portfolio.get_wallet(code)
         if wallet.balance < amount:
