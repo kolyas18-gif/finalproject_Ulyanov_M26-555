@@ -1,6 +1,8 @@
 import math
 from datetime import UTC, datetime
 
+from valutatrade_hub.core.currencies import get_currency
+from valutatrade_hub.core.exceptions import ApiRequestError
 from valutatrade_hub.core.utils import load_json, save_json
 
 CACHE_TTL = 300
@@ -41,10 +43,36 @@ def _is_fresh(record: dict, now: datetime) -> bool:
         return False
 
 
+def _fetch_stub_rate(source: str, target: str) -> float:
+    """Получает курс из учебной заглушки и проверяет данные источника."""
+    try:
+        source_rate = EXCHANGE_RATES[source]
+        target_rate = EXCHANGE_RATES[target]
+
+        for value in (source_rate, target_rate):
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                raise TypeError("Источник вернул нечисловой курс.")
+            if not math.isfinite(value) or value <= 0:
+                raise ValueError("Источник вернул некорректный курс.")
+
+        rate = source_rate / target_rate
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError("Невозможно рассчитать курс.")
+
+        if not math.isfinite(1.0 / rate):
+            raise ValueError("Невозможно рассчитать обратный курс.")
+
+        return rate
+    except (KeyError, TypeError, ValueError, ArithmeticError) as error:
+        raise ApiRequestError(
+            f"не удалось получить курс {source}→{target} из заглушки"
+        ) from error
+
+
 def get_rate(from_currency: str, to_currency: str) -> dict:
-    """Возвращает курс и время; устаревший кеш обновляет из заглушки."""
-    source = normalize_currency(from_currency)
-    target = normalize_currency(to_currency)
+    """Проверяет валюты и возвращает свежий курс из кеша или заглушки."""
+    source = get_currency(normalize_currency(from_currency)).code
+    target = get_currency(normalize_currency(to_currency)).code
     now = datetime.now(UTC)
 
     cache = load_json("rates.json", {})
@@ -57,17 +85,14 @@ def get_rate(from_currency: str, to_currency: str) -> dict:
     if isinstance(record, dict) and _is_fresh(record, now):
         return record.copy()
 
-    if source not in EXCHANGE_RATES or target not in EXCHANGE_RATES:
-        raise ValueError(f"Курс {source}→{target} недоступен. Повторите попытку позже.")
-
-    rate = EXCHANGE_RATES[source] / EXCHANGE_RATES[target]
+    rate = _fetch_stub_rate(source, target)
     timestamp = now.isoformat()
-
     record = {
         "rate": rate,
         "updated_at": timestamp,
         "source": "Stub",
     }
+
     cache[key] = record
     cache[f"{target}_{source}"] = {
         "rate": 1.0 / rate,
@@ -77,5 +102,4 @@ def get_rate(from_currency: str, to_currency: str) -> dict:
     cache["source"] = "Stub"
     cache["last_refresh"] = timestamp
     save_json("rates.json", cache)
-
     return record.copy()

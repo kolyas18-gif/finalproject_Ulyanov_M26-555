@@ -3,6 +3,12 @@ import shlex
 
 from prettytable import PrettyTable
 
+from valutatrade_hub.core.currencies import CURRENCY_REGISTRY
+from valutatrade_hub.core.exceptions import (
+    ApiRequestError,
+    CurrencyNotFoundError,
+    InsufficientFundsError,
+)
 from valutatrade_hub.core.usecases import TradingService
 
 HELP_TEXT = """
@@ -149,5 +155,14 @@ def main() -> None:
                 break
 
             execute_command(service, args)
+        except InsufficientFundsError as error:
+            print(error)
+        except CurrencyNotFoundError as error:
+            print(error)
+            codes = ", ".join(sorted(CURRENCY_REGISTRY))
+            print(f"Поддерживаемые валюты: {codes}")
+        except ApiRequestError as error:
+            print(error)
+            print("Повторите попытку позже или проверьте подключение к сети.")
         except (ValueError, TypeError, OSError) as error:
             print(f"Ошибка: {error}")

@@ -3,6 +3,8 @@ import hmac
 import math
 from datetime import datetime
 
+from valutatrade_hub.core.exceptions import InsufficientFundsError
+
 
 class User:
     def __init__(
@@ -109,13 +111,19 @@ class Wallet:
         self.balance = self.balance + amount
 
     def withdraw(self, amount: float) -> None:
+        """Снимает положительную сумму при достаточном балансе."""
         amount = self._validate_number(amount)
         if amount <= 0:
             raise ValueError("Сумма снятия должна быть положительной.")
-        if amount > self.balance:
-            raise ValueError("Недостаточно средств.")
 
-        self.balance = self.balance - amount
+        if amount > self.balance:
+            raise InsufficientFundsError(
+                available=self.balance,
+                required=amount,
+                code=self.currency_code,
+            )
+
+        self.balance -= amount
 
     def get_balance_info(self) -> dict:
         return {
