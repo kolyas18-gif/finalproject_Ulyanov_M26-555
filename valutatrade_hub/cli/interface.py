@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--password", required=True)
 
     portfolio = commands.add_parser("show-portfolio")
-    portfolio.add_argument("--base", default="USD")
+    portfolio.add_argument("--base", default=None)
 
     for name in ("buy", "sell"):
         command = commands.add_parser(name)

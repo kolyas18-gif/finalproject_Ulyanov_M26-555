@@ -4,8 +4,7 @@ from datetime import UTC, datetime
 from valutatrade_hub.core.currencies import get_currency
 from valutatrade_hub.core.exceptions import ApiRequestError
 from valutatrade_hub.core.utils import load_json, save_json
-
-CACHE_TTL = 300
+from valutatrade_hub.infra.settings import SettingsLoader
 
 EXCHANGE_RATES = {
     "USD": 1.0,
@@ -38,7 +37,8 @@ def _is_fresh(record: dict, now: datetime) -> bool:
             updated_at = updated_at.replace(tzinfo=UTC)
 
         age = (now - updated_at).total_seconds()
-        return 0 <= age < CACHE_TTL
+        ttl = SettingsLoader().get("rates_ttl_seconds")
+        return 0 <= age < ttl
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
 

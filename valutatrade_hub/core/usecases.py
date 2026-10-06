@@ -6,6 +6,7 @@ from valutatrade_hub.core.exceptions import InsufficientFundsError
 from valutatrade_hub.core.models import Portfolio, User, Wallet
 from valutatrade_hub.core.rates import get_rate, normalize_currency
 from valutatrade_hub.core.utils import load_json, save_json
+from valutatrade_hub.infra.settings import SettingsLoader
 
 
 class TradingService:
@@ -13,6 +14,7 @@ class TradingService:
 
     def __init__(self):
         self.current_user: User | None = None
+        self.settings = SettingsLoader()
 
     @staticmethod
     def _validate_username(username: str) -> str:
@@ -145,9 +147,13 @@ class TradingService:
     def get_rate(self, from_currency: str, to_currency: str) -> dict:
         return get_rate(from_currency, to_currency)
 
-    def show_portfolio(self, base_currency: str = "USD") -> dict:
+    def show_portfolio(self, base_currency: str | None = None) -> dict:
         """Готовит балансы и оценку портфеля для вывода в CLI."""
         portfolio = self.get_portfolio()
+
+        if base_currency is None:
+            base_currency = self.settings.get("default_base_currency")
+
         base = normalize_currency(base_currency)
 
         try:

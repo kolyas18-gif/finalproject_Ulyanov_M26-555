@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 
-DATA_DIR = Path("data")
+from valutatrade_hub.infra.settings import SettingsLoader
+
+DATA_DIR = Path(SettingsLoader().get("data_dir"))
 
 
 def load_json(filename: str, default):
