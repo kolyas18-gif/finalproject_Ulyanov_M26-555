@@ -24,9 +24,7 @@ def log_action(action: str, *, verbose: bool = False):
             arguments = bound.arguments
 
             user = self.current_user
-            currency = arguments.get(
-                "currency_code", arguments.get("currency")
-            )
+            currency = arguments.get("currency_code", arguments.get("currency"))
             if isinstance(currency, str):
                 currency = currency.strip().upper()
 
@@ -40,7 +38,7 @@ def log_action(action: str, *, verbose: bool = False):
 
             try:
                 result = func(self, *args, **kwargs)
-            except Exception as error:  # noqa: BLE001
+            except Exception as error:
                 # Фиксируем любой сбой операции и пробрасываем его без замены.
                 fields.update(
                     result="ERROR",

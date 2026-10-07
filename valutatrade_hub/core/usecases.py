@@ -158,12 +158,7 @@ class TradingService:
         if base_currency is None:
             base_currency = self.settings.get("default_base_currency")
 
-        base = normalize_currency(base_currency)
-
-        try:
-            self.get_rate(base, "USD")
-        except ValueError as error:
-            raise ValueError(f"Неизвестная базовая валюта '{base}'.") from error
+        base = get_currency(normalize_currency(base_currency)).code
 
         rows = []
         total = 0.0

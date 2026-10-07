@@ -130,6 +130,22 @@ CURRENCY_REGISTRY = {
     },
 }
 
+CURRENCY_REGISTRY.update(
+    {
+        "GBP": {
+            "type": FiatCurrency,
+            "name": "British Pound",
+            "issuing_country": "United Kingdom",
+        },
+        "SOL": {
+            "type": CryptoCurrency,
+            "name": "Solana",
+            "algorithm": "Proof of Stake",
+            "market_cap": 0.0,
+        },
+    }
+)
+
 
 def get_currency(code: str) -> Currency:
     """Создаёт валюту по коду или сообщает, что она не найдена."""

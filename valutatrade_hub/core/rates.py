@@ -2,17 +2,8 @@ import math
 from datetime import UTC, datetime
 
 from valutatrade_hub.core.currencies import get_currency
-from valutatrade_hub.core.exceptions import ApiRequestError
-from valutatrade_hub.core.utils import load_json, save_json
+from valutatrade_hub.core.utils import load_json
 from valutatrade_hub.infra.settings import SettingsLoader
-
-EXCHANGE_RATES = {
-    "USD": 1.0,
-    "EUR": 1.1,
-    "RUB": 0.01,
-    "BTC": 60000.0,
-    "ETH": 3000.0,
-}
 
 
 def normalize_currency(currency_code: str) -> str:
@@ -23,8 +14,14 @@ def normalize_currency(currency_code: str) -> str:
     return currency_code.strip().upper()
 
 
+def _record_time(record: dict) -> datetime:
+    updated = datetime.fromisoformat(record["updated_at"])
+    if updated.tzinfo is None:
+        raise ValueError("Время курса должно содержать часовой пояс.")
+    return updated.astimezone(UTC)
+
+
 def _is_fresh(record: dict, now: datetime) -> bool:
-    """Проверяет корректность курса и срок действия записи."""
     try:
         rate = record["rate"]
         if isinstance(rate, bool) or not isinstance(rate, (int, float)):
@@ -32,74 +29,123 @@ def _is_fresh(record: dict, now: datetime) -> bool:
         if not math.isfinite(rate) or rate <= 0:
             return False
 
-        updated_at = datetime.fromisoformat(record["updated_at"])
-        if updated_at.tzinfo is None:
-            updated_at = updated_at.replace(tzinfo=UTC)
+        source = record.get("source")
+        if not isinstance(source, str) or not source.strip():
+            return False
+        if source == "Stub":
+            return False
 
-        age = (now - updated_at).total_seconds()
+        age = (now - _record_time(record)).total_seconds()
         ttl = SettingsLoader().get("rates_ttl_seconds")
         return 0 <= age < ttl
     except (KeyError, TypeError, ValueError, OverflowError):
         return False
 
 
-def _fetch_stub_rate(source: str, target: str) -> float:
-    """Получает курс из учебной заглушки и проверяет данные источника."""
-    try:
-        source_rate = EXCHANGE_RATES[source]
-        target_rate = EXCHANGE_RATES[target]
-
-        for value in (source_rate, target_rate):
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
-                raise TypeError("Источник вернул нечисловой курс.")
-            if not math.isfinite(value) or value <= 0:
-                raise ValueError("Источник вернул некорректный курс.")
-
-        rate = source_rate / target_rate
-        if not math.isfinite(rate) or rate <= 0:
-            raise ValueError("Невозможно рассчитать курс.")
-
-        if not math.isfinite(1.0 / rate):
-            raise ValueError("Невозможно рассчитать обратный курс.")
-
-        return rate
-    except (KeyError, TypeError, ValueError, ArithmeticError) as error:
-        raise ApiRequestError(
-            f"не удалось получить курс {source}→{target} из заглушки"
-        ) from error
-
-
-def get_rate(from_currency: str, to_currency: str) -> dict:
-    """Проверяет валюты и возвращает свежий курс из кеша или заглушки."""
-    source = get_currency(normalize_currency(from_currency)).code
-    target = get_currency(normalize_currency(to_currency)).code
-    now = datetime.now(UTC)
+def load_rates_cache() -> dict:
+    """Читает новый кэш; старый формат требует обновления парсером."""
 
     cache = load_json("rates.json", {})
     if not isinstance(cache, dict):
         raise TypeError("В rates.json должен храниться JSON-объект.")
 
-    key = f"{source}_{target}"
-    record = cache.get(key)
+    pairs = cache.get("pairs", {})
+    if not isinstance(pairs, dict):
+        raise TypeError("Поле pairs должно быть словарём.")
 
-    if isinstance(record, dict) and _is_fresh(record, now):
-        return record.copy()
-
-    rate = _fetch_stub_rate(source, target)
-    timestamp = now.isoformat()
-    record = {
-        "rate": rate,
-        "updated_at": timestamp,
-        "source": "Stub",
+    return {
+        "pairs": pairs,
+        "last_refresh": cache.get("last_refresh"),
     }
 
-    cache[key] = record
-    cache[f"{target}_{source}"] = {
-        "rate": 1.0 / rate,
-        "updated_at": timestamp,
-        "source": "Stub",
-    }
-    cache["source"] = "Stub"
-    cache["last_refresh"] = timestamp
-    save_json("rates.json", cache)
-    return record.copy()
+
+def _checked_rate(value: float) -> float:
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(
+            "Некорректный результат пересчёта курса. Выполните update-rates."
+        )
+    return value
+
+
+def _read_pair(
+    pairs: dict,
+    source: str,
+    target: str,
+    now: datetime,
+) -> dict | None:
+    for key, inverse in (
+        (f"{source}_{target}", False),
+        (f"{target}_{source}", True),
+    ):
+        record = pairs.get(key)
+        if record is None:
+            continue
+
+        if not isinstance(record, dict) or not _is_fresh(record, now):
+            raise ValueError(
+                f"Курс {key} устарел или некорректен. Выполните update-rates."
+            )
+
+        rate = float(record["rate"])
+        if inverse:
+            rate = 1.0 / rate
+
+        return {
+            "rate": _checked_rate(rate),
+            "updated_at": record["updated_at"],
+            "source": record["source"],
+        }
+
+    return None
+
+
+def get_rate(from_currency: str, to_currency: str) -> dict:
+    """Возвращает свежий курс из кэша, при необходимости через USD."""
+
+    source = get_currency(normalize_currency(from_currency)).code
+    target = get_currency(normalize_currency(to_currency)).code
+    now = datetime.now(UTC)
+
+    if source == target:
+        return {
+            "rate": 1.0,
+            "updated_at": now.isoformat(),
+            "source": "Identity",
+        }
+
+    cache = load_rates_cache()
+    pairs = cache["pairs"]
+    if not pairs:
+        raise ValueError(
+            "Локальный кэш курсов пуст или имеет старый формат. Выполните update-rates."
+        )
+
+    direct = _read_pair(pairs, source, target, now)
+    if direct is not None:
+        return direct
+
+    if source != "USD" and target != "USD":
+        source_usd = _read_pair(pairs, source, "USD", now)
+        target_usd = _read_pair(pairs, target, "USD", now)
+
+        if source_usd is not None and target_usd is not None:
+            rate = _checked_rate(source_usd["rate"] / target_usd["rate"])
+            oldest = min(
+                _record_time(source_usd),
+                _record_time(target_usd),
+            )
+            sources = sorted(
+                {
+                    source_usd["source"],
+                    target_usd["source"],
+                }
+            )
+            return {
+                "rate": rate,
+                "updated_at": oldest.isoformat(),
+                "source": " / ".join(sources),
+            }
+
+    raise ValueError(
+        f"Курс {source}→{target} не найден в кэше. Выполните update-rates."
+    )
