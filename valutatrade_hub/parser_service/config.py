@@ -2,8 +2,17 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from valutatrade_hub.infra.settings import SettingsLoader
 
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+
+load_dotenv(
+    dotenv_path=PROJECT_ROOT / ".env",
+    override=False,
+    encoding="utf-8-sig",
+)
 
 def _data_path(filename: str) -> Path:
     return Path(SettingsLoader().get("data_dir")) / filename
