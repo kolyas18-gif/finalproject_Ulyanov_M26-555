@@ -1,7 +1,7 @@
 [project]
 name = "finalproject-ulyanov-m26-555"
 version = "0.1.0"
-description = "Add your description here"
+description = "ValutaTrade Hub: CLI для виртуальной торговли валютами и получения курсов из внешних API"
 readme = "README.md"
 authors = [
     { name = "Nikolai_Ulyanov", email = "kolyas18@gmail.com" }

@@ -14,6 +14,7 @@ load_dotenv(
     encoding="utf-8-sig",
 )
 
+
 def _data_path(filename: str) -> Path:
     return Path(SettingsLoader().get("data_dir")) / filename
 
@@ -52,3 +53,4 @@ class ParserConfig:
     )
 
     REQUEST_TIMEOUT: int = 10
+    UPDATE_INTERVAL_SECONDS: int = 300
